@@ -21,6 +21,28 @@ exports.createLightningWallet = async (req, res) => {
   }
 };
 
+exports.createLightningChannel = async (req, res) => {
+  try {
+    const user = await User.findById(req.userId);
+    const wallet = await lightningService.createLightningChannel(nodeUri, amount);
+    
+    user.wallets.push({
+      type: 'lightning',
+      address: wallet.walletId,
+      privateKey: wallet.privateKey,
+      mnemonic: wallet.mnemonic
+    });
+    const { nodeUri, amount } = req.body;
+    const channel = await lightningService.createLightningChannel(nodeUri, amount);
+    res.json(channel);
+    await user.save();
+    
+    res.json({ message: 'Lightning wallet created successfully', walletId: wallet.walletId });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
 exports.importLightningWallet = async (req, res) => {
   try {
     const { mnemonic } = req.body;
@@ -136,6 +158,36 @@ exports.getLightningTransactionHistory = async (req, res) => {
     res.json(history);
   } catch (error) {
     res.status(500).json({ error: 'Failed to get Lightning transaction history' });
+  }
+};
+
+exports.getChannelConfigurations = async (req, res) => {
+  try {
+    const configurations = await lightningService.getChannelConfigurations(req.userId);
+    res.json(configurations);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
+exports.updateChannelConfiguration = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const updates = req.body;
+    const updatedConfig = await lightningService.updateChannelConfiguration(req.userId, id, updates);
+    res.json(updatedConfig);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
+exports.deleteChannelConfiguration = async (req, res) => {
+  try {
+    const { id } = req.params;
+    await lightningService.deleteChannelConfiguration(req.userId, id);
+    res.json({ message: 'Channel configuration deleted successfully' });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
   }
 };
 

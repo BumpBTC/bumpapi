@@ -31,24 +31,39 @@ exports.generateLitecoinWallet = async (mnemonic, privateKey) => {
 };
 
 exports.getLitecoinBalance = async (address) => {
-  const response = await axios.get(`${LITECOIN_API_URL}/get_address_balance/${address}`);
-  return parseFloat(response.data.data.confirmed_balance);
+  try {
+    const response = await axios.get(`${LITECOIN_API_URL}/get_address_balance/LTCTEST/${address}`);
+    return parseFloat(response.data.data.confirmed_balance);
+  } catch (error) {
+    console.error('Failed to get Litecoin balance:', error);
+    throw error;
+  }
 };
 
 exports.sendLitecoin = async (fromAddress, toAddress, amount, privateKey) => {
-  const utxosResponse = await axios.get(`${LITECOIN_API_URL}/get_tx_unspent/${fromAddress}`);
-  const utxos = utxosResponse.data.data.txs;
+  try {
+    const utxosResponse = await axios.get(`${LITECOIN_API_URL}/get_tx_unspent/LTCTEST/${fromAddress}`);
+    const utxos = utxosResponse.data.data.txs.map(utxo => ({
+      txid: utxo.txid,
+      vout: utxo.output_no,
+      scriptPubKey: utxo.script_hex,
+      satoshis: Math.floor(parseFloat(utxo.value) * 100000000),
+    }));
 
-  const tx = new litecore.Transaction()
-    .from(utxos)
-    .to(toAddress, Math.floor(amount * 100000000))
-    .change(fromAddress)
-    .sign(privateKey);
+    const tx = new litecore.Transaction()
+      .from(utxos)
+      .to(toAddress, Math.floor(amount * 100000000))
+      .change(fromAddress)
+      .sign(privateKey);
 
-  const txHex = tx.serialize();
+    const txHex = tx.serialize();
 
-  const broadcastResponse = await axios.post(`${LITECOIN_API_URL}/send_tx`, { tx_hex: txHex });
-  return broadcastResponse.data.data.txid;
+    const broadcastResponse = await axios.post(`${LITECOIN_API_URL}/send_tx/LTCTEST`, { tx_hex: txHex });
+    return broadcastResponse.data.data.txid;
+  } catch (error) {
+    console.error('Failed to send Litecoin:', error);
+    throw error;
+  }
 };
 
 exports.generateLitecoinAddress = async (publicKey) => {
@@ -57,13 +72,18 @@ exports.generateLitecoinAddress = async (publicKey) => {
 };
 
 exports.getLitecoinTransactionHistory = async (address) => {
-  const response = await axios.get(`${LITECOIN_API_URL}/address/${address}`);
-  return response.data.data.txs.map(tx => ({
-    txid: tx.txid,
-    amount: parseFloat(tx.value),
-    confirmations: tx.confirmations,
-    timestamp: tx.time,
-  }));
+  try {
+    const response = await axios.get(`${LITECOIN_API_URL}/get_tx_received/LTCTEST/${address}`);
+    return response.data.data.txs.map(tx => ({
+      txid: tx.txid,
+      amount: parseFloat(tx.value),
+      confirmations: tx.confirmations,
+      time: tx.time,
+    }));
+  } catch (error) {
+    console.error('Failed to get Litecoin transaction history:', error);
+    throw error;
+  }
 };
 
 module.exports = exports;

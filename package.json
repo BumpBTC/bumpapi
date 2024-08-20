@@ -1,7 +1,7 @@
 {
-  "name": "instant-bitcoin-wallet-backend",
-  "version": "0.0.1",
-  "description": "tap-to-pay btc wallet",
+  "name": "bumpbtc-wallet-api",
+  "version": "0.0.2",
+  "description": "tap-to-pay mobile btc wallet",
   "main": "src/app.js",
   "engines": {
     "node": ">=18.0.0 <19.0.0"
@@ -28,11 +28,12 @@
     "http-errors": "~1.6.3",
     "jade": "~1.11.0",
     "jsonwebtoken": "^9.0.2",
-    "litecore-lib": "^0.13.22",
     "lightning": "^10.18.0",
+    "litecore-lib": "^0.13.22",
     "ln-service": "^57.18.0",
     "mongoose": "^8.5.2",
     "morgan": "~1.9.1",
+    "multer": "^1.4.5-lts.1",
     "nodemailer": "^6.6.0",
     "qrcode": "^1.5.4",
     "react-native-qrcode-svg": "^6.3.2",

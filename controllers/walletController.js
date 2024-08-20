@@ -1,7 +1,7 @@
 const User = require('../models/User');
-const { getBalance, sendTransaction, generateWallet, generateAddress } = require('../services/bitcoinService');
-const { getChannelBalance, createInvoice, payInvoice, createLightningWallet } = require('../services/lightningService');
-const { generateLitecoinWallet, getLitecoinBalance, sendLitecoin, generateLitecoinAddress } = require('../services/litecoinService');
+const { getBalance, sendTransaction, generateWallet, generateAddress, sendBitcoinTransaction } = require('../services/bitcoinService');
+const { getChannelBalance, createInvoice, payInvoice, createLightningWallet, sendLightningPayment } = require('../services/lightningService');
+const { generateLitecoinWallet, getLitecoinBalance, sendLitecoin, generateLitecoinAddress, sendLitecoinTransaction } = require('../services/litecoinService');
 const bitcoinService = require('../services/bitcoinService');
 const lightningService = require('../services/lightningService');
 const litecoinService = require('../services/litecoinService');
@@ -103,6 +103,52 @@ exports.resetPassword = async (req, res) => {
   }
 };
 
+exports.sendTransaction = async (req, res) => {
+  try {
+    const { currency, toAddress, amount } = req.body;
+    const user = await User.findById(req.userId);
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    const wallet = user.wallets.find(w => w.type.toLowerCase() === currency.toLowerCase());
+    if (!wallet) {
+      return res.status(400).json({ error: `${currency} wallet not found for this user` });
+    }
+
+    let txid;
+    switch (currency.toLowerCase()) {
+      case 'bitcoin':
+        txid = await sendBitcoinTransaction(wallet.address, toAddress, amount, wallet.privateKey);
+        break;
+      case 'lightning':
+        txid = await sendLightningPayment(wallet.publicKey, toAddress, amount);
+        break;
+      case 'litecoin':
+        txid = await sendLitecoinTransaction(wallet.address, toAddress, amount, wallet.privateKey);
+        break;
+      default:
+        return res.status(400).json({ error: 'Invalid currency' });
+    }
+
+    const transaction = {
+      type: 'send',
+      amount,
+      address: toAddress,
+      status: 'completed',
+      walletType: currency.toLowerCase(),
+      txid,
+    };
+    user.transactions.push(transaction);
+    await user.save();
+
+    res.json({ txid, transaction });
+  } catch (error) {
+    console.error('Error sending transaction:', error);
+    res.status(500).json({ error: 'Failed to send transaction' });
+  }
+};
+
 exports.sendBitcoin = async (req, res) => {
   try {
     const { toAddress, amount } = req.body;
@@ -113,10 +159,18 @@ exports.sendBitcoin = async (req, res) => {
 
     const bitcoinWallet = user.wallets.find(w => w.type === 'bitcoin');
     if (!bitcoinWallet) {
-      return res.status(400).json({ error: 'Bitcoin wallet not found for this user' });
+      const newWallet = await bitcoinService.generateWallet();
+      user.wallets.push(newWallet);
+      await user.save();
+      return res.status(400).json({ error: 'Bitcoin wallet created. Please try sending again.' });
     }
 
-    const txid = await sendTransaction(bitcoinWallet.address, toAddress, amount, bitcoinWallet.privateKey);
+    if (!bitcoinWallet.privateKey || bitcoinWallet.privateKey.length !== 64) {
+      console.error('Invalid private key:', bitcoinWallet.privateKey);
+      return res.status(400).json({ error: 'Invalid private key' });
+    }
+
+    const txid = await bitcoinService.sendTransaction(bitcoinWallet.address, toAddress, amount, bitcoinWallet.privateKey);
     
     const transaction = {
       type: 'send',
@@ -132,7 +186,7 @@ exports.sendBitcoin = async (req, res) => {
     res.json({ txid, transaction });
   } catch (error) {
     console.error('Error sending Bitcoin:', error);
-    res.status(500).json({ error: 'Failed to send Bitcoin' });
+    res.status(500).json({ error: 'Failed to send Bitcoin', details: error.message });
   }
 };
 

@@ -6,31 +6,26 @@ const bip32 = require('bip32');
 
 const network = bitcoin.networks.testnet; // Use mainnet for production
 
-exports.generateWallet = async (mnemonic, privateKey) => {
-  let seed, root;
-  if (mnemonic) {
-    seed = await bip39.mnemonicToSeed(mnemonic);
-    root = bip32.fromSeed(seed, network);
-  } else if (privateKey) {
-    root = bip32.fromPrivateKey(Buffer.from(privateKey, 'hex'), Buffer.alloc(32), network);
-  } else {
-    mnemonic = bip39.generateMnemonic();
-    seed = await bip39.mnemonicToSeed(mnemonic);
-    root = bip32.fromSeed(seed, network);
+exports.generateWallet = async (mnemonic) => {
+  try {
+    mnemonic = mnemonic || bip39.generateMnemonic();
+    const seed = await bip39.mnemonicToSeed(mnemonic);
+    const root = bip32.fromSeed(seed, network);
+    const account = root.derivePath("m/84'/0'/0'");
+    const node = account.derive(0).derive(0);
+    const { address } = bitcoin.payments.p2wpkh({ pubkey: node.publicKey, network });
+
+    return {
+      type: 'bitcoin',
+      address,
+      publicKey: node.publicKey.toString('hex'),
+      privateKey: node.privateKey.toString('hex'),
+      mnemonic,
+    };
+  } catch (error) {
+    console.error('Error generating wallet:', error);
+    throw error;
   }
-
-  const account = root.derivePath("m/84'/0'/0'"); // BIP84 for native SegWit
-  const node = account.derive(0).derive(0);
-
-  const { address } = bitcoin.payments.p2wpkh({ pubkey: node.publicKey, network });
-
-  return {
-    type: 'bitcoin',
-    address,
-    publicKey: node.publicKey.toString('hex'),
-    privateKey: node.privateKey.toString('hex'),
-    mnemonic,
-  };
 };
 
 
@@ -40,45 +35,53 @@ exports.getBalance = async (address) => {
 };
 
 exports.sendTransaction = async (fromAddress, toAddress, amount, privateKey) => {
-  const keyPair = bitcoin.ECPair.fromPrivateKey(Buffer.from(privateKey, 'hex'), { network });
-  const psbt = new bitcoin.Psbt({ network });
+  try {
+    if (!privateKey || privateKey.length !== 64) {
+      throw new Error('Invalid private key');
+    }
+    const keyPair = bitcoin.ECPair.fromPrivateKey(Buffer.from(privateKey, 'hex'), { network });
+    const psbt = new bitcoin.Psbt({ network });
 
-  const utxosResponse = await axios.get(`https://blockstream.info/testnet/api/address/${fromAddress}/utxo`);
-  const utxos = utxosResponse.data;
+    const utxosResponse = await axios.get(`https://blockstream.info/testnet/api/address/${fromAddress}/utxo`);
+    const utxos = utxosResponse.data;
 
-  let totalInput = 0;
-  for (const utxo of utxos) {
-    const txResponse = await axios.get(`https://blockstream.info/testnet/api/tx/${utxo.txid}/hex`);
-    const tx = bitcoin.Transaction.fromHex(txResponse.data);
-    psbt.addInput({
-      hash: utxo.txid,
-      index: utxo.vout,
-      witnessUtxo: tx.outs[utxo.vout],
-    });
-    totalInput += utxo.value;
-    if (totalInput >= amount * 100000000 + 1000) break; // Add 1000 satoshis for fee
-  }
+    let totalInput = 0;
+    for (const utxo of utxos) {
+      const txResponse = await axios.get(`https://blockstream.info/testnet/api/tx/${utxo.txid}/hex`);
+      const tx = bitcoin.Transaction.fromHex(txResponse.data);
+      psbt.addInput({
+        hash: utxo.txid,
+        index: utxo.vout,
+        witnessUtxo: tx.outs[utxo.vout],
+      });
+      totalInput += utxo.value;
+      if (totalInput >= amount * 100000000 + 1000) break;
+    }
 
-  psbt.addOutput({
-    address: toAddress,
-    value: Math.floor(amount * 100000000),
-  });
-
-  if (totalInput > amount * 100000000 + 1000) {
     psbt.addOutput({
-      address: fromAddress,
-      value: totalInput - Math.floor(amount * 100000000) - 1000,
+      address: toAddress,
+      value: Math.floor(amount * 100000000),
     });
+
+    if (totalInput > amount * 100000000 + 1000) {
+      psbt.addOutput({
+        address: fromAddress,
+        value: totalInput - Math.floor(amount * 100000000) - 1000,
+      });
+    }
+
+    psbt.signAllInputs(keyPair);
+    psbt.finalizeAllInputs();
+
+    const tx = psbt.extractTransaction();
+    const txHex = tx.toHex();
+
+    const broadcastResponse = await axios.post('https://blockstream.info/testnet/api/tx', txHex);
+    return broadcastResponse.data;
+  } catch (error) {
+    console.error('Error in sendTransaction:', error);
+    throw error;
   }
-
-  psbt.signAllInputs(keyPair);
-  psbt.finalizeAllInputs();
-
-  const tx = psbt.extractTransaction();
-  const txHex = tx.toHex();
-
-  const broadcastResponse = await axios.post('https://blockstream.info/testnet/api/tx', txHex);
-  return broadcastResponse.data; // Transaction ID
 };
 
 exports.generateAddress = async (publicKey) => {

@@ -7,6 +7,7 @@ const walletRoutes = require("./routes/walletRoutes");
 const lightningRoutes = require("./routes/lightningRoutes");
 const litecoinRoutes = require("./routes/litecoinRoutes");
 const stakeRoutes = require("./routes/stakeRoutes");
+const contactRoutes = require('./routes/contactRoutes');
 const { errorHandler } = require("./middleware/errorMiddleware");
 const { initLightning } = require("./services/lightningService");
 const { authMiddleware } = require("./middleware/authMiddleware");
@@ -38,6 +39,7 @@ app.use("/api/wallet", authMiddleware, walletRoutes);
 app.use("/api/wallet", walletRoutes);
 app.use('/api/lightning', authMiddleware, lightningRoutes);
 app.use("/api/litecoin", authMiddleware, litecoinRoutes);
+app.use('/api/contacts', contactRoutes);
 app.use("/api/stake", stakeRoutes);
 app.get("/convert", async (req, res) => {
   try {

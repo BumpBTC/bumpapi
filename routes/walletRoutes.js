@@ -12,6 +12,7 @@ const {
   updateSecurityLevel,
   backupWallet,
   restoreWallet,
+  sendTransaction,
   getTransactionHistory,
   updateAccountSettings,
 } = require("../controllers/walletController");
@@ -27,6 +28,7 @@ router.post("/reset-password", resetPassword);
 router.post("/import", importWallet);
 router.post("/send-bitcoin", sendBitcoin);
 router.post("/send-lightning", sendLightning);
+router.post("/send-transaction", sendTransaction);
 router.get("/account-details", getAccountDetails);
 router.post("/create-lightning-invoice", createLightningInvoice);
 router.post("/update-security", authMiddleware, updateSecurityLevel);
