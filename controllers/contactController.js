@@ -25,15 +25,15 @@ exports.addContact = async (req, res) => {
       picture = req.file.filename;
     }
 
-    if (bitcoinAddress && !isValidBitcoinAddress(bitcoinAddress)) {
-      return res.status(400).json({ error: 'Invalid Bitcoin address' });
-    }
-    if (lightningPublicKey && !isValidLightningAddress(lightningPublicKey)) {
-      return res.status(400).json({ error: 'Invalid Lightning public key' });
-    }
-    if (litecoinAddress && !isValidLitecoinAddress(litecoinAddress)) {
-      return res.status(400).json({ error: 'Invalid Litecoin address' });
-    }
+    // if (bitcoinAddress && !isValidBitcoinAddress(bitcoinAddress)) {
+    //   return res.status(400).json({ error: 'Invalid Bitcoin address' });
+    // }
+    // if (lightningPublicKey && !isValidLightningAddress(lightningPublicKey)) {
+    //   return res.status(400).json({ error: 'Invalid Lightning public key' });
+    // }
+    // if (litecoinAddress && !isValidLitecoinAddress(litecoinAddress)) {
+    //   return res.status(400).json({ error: 'Invalid Litecoin address' });
+    // }
 
     const user = await User.findById(req.userId);
     user.contacts.push({ name, picture, bitcoinAddress, lightningPublicKey, litecoinAddress });

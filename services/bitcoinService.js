@@ -6,9 +6,9 @@ const bip32 = require('bip32');
 
 const network = bitcoin.networks.testnet; // Use mainnet for production
 
-exports.generateWallet = async (mnemonic) => {
+exports.generateWallet = async () => {
   try {
-    mnemonic = mnemonic || bip39.generateMnemonic();
+    const mnemonic = bip39.generateMnemonic();
     const seed = await bip39.mnemonicToSeed(mnemonic);
     const root = bip32.fromSeed(seed, network);
     const account = root.derivePath("m/84'/0'/0'");
@@ -23,15 +23,22 @@ exports.generateWallet = async (mnemonic) => {
       mnemonic,
     };
   } catch (error) {
-    console.error('Error generating wallet:', error);
+    console.error('Error generating Bitcoin wallet:', error);
     throw error;
   }
 };
 
-
 exports.getBalance = async (address) => {
-  const response = await axios.get(`https://blockstream.info/testnet/api/address/${address}`);
-  return response.data.chain_stats.funded_txo_sum / 100000000; // Convert satoshis to BTC
+  try {
+    if (!address) {
+      throw new Error('Bitcoin address is undefined');
+    }
+    const response = await axios.get(`https://blockstream.info/testnet/api/address/${address}`);
+    return response.data.chain_stats.funded_txo_sum / 100000000; // Convert satoshis to BTC
+  } catch (error) {
+    console.error('Error fetching Bitcoin balance:', error);
+    return 0; // Return 0 balance in case of an error
+  }
 };
 
 exports.sendTransaction = async (fromAddress, toAddress, amount, privateKey) => {

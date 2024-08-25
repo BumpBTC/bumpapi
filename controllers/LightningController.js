@@ -21,28 +21,6 @@ exports.createLightningWallet = async (req, res) => {
   }
 };
 
-exports.createLightningChannel = async (req, res) => {
-  try {
-    const user = await User.findById(req.userId);
-    const wallet = await lightningService.createLightningChannel(nodeUri, amount);
-    
-    user.wallets.push({
-      type: 'lightning',
-      address: wallet.walletId,
-      privateKey: wallet.privateKey,
-      mnemonic: wallet.mnemonic
-    });
-    const { nodeUri, amount } = req.body;
-    const channel = await lightningService.createLightningChannel(nodeUri, amount);
-    res.json(channel);
-    await user.save();
-    
-    res.json({ message: 'Lightning wallet created successfully', walletId: wallet.walletId });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-};
-
 exports.importLightningWallet = async (req, res) => {
   try {
     const { mnemonic } = req.body;

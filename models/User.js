@@ -17,19 +17,23 @@ const contactSchema = new mongoose.Schema({
 });
 
 const walletSchema = new mongoose.Schema({
-  type: {
-    type: String,
-    enum: ["bitcoin", "lightning", "litecoin"],
-    required: true,
-  },
-  address: { type: String },
-  publicKey: { type: String },
-  privateKey: { type: String },
-  mnemonic: { type: String },
-  balance: { type: Number, default: 0 },
+  wallets: [{
+    type: {
+      type: String,
+      enum: ["bitcoin", "lightning", "litecoin"],
+      required: true,
+    },
+    address: { type: String },
+    publicKey: { type: String },
+    privateKey: { type: String },
+    mnemonic: { type: String },
+    balance: { type: Number, default: 0 },
+    isActive: { type: Boolean, default: false },
+  }],
 });
 
 const transactionSchema = new mongoose.Schema({
+  userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
   type: { type: String, enum: ["send", "receive"], required: true },
   amount: { type: Number, required: true },
   address: { type: String, required: true },
@@ -50,7 +54,7 @@ const transactionSchema = new mongoose.Schema({
 
 const userSchema = new mongoose.Schema({
   username: { type: String, required: true, unique: true },
-  email: { type: String, required: true, unique: true },
+  email: { type: String, unique: true, sparse: true },
   password: { type: String, required: true },
   contacts: [contactSchema],
   securityLevel: { type: Number, default: 1 },
@@ -61,15 +65,33 @@ const userSchema = new mongoose.Schema({
   //   default: "basic",
   // },
   preferredCurrency: { type: String, default: 'USD' },
+  backedUp: { type: Boolean, default: false },
   phoneNumber: { type: String },
   totpSecret: { type: String },
   hardwareKeyId: { type: String },
+  bitcoinWallet: {
+    address: String,
+    privateKey: String,
+  },
+  litecoinWallet: {
+    address: String,
+    privateKey: String,
+  },
+  lightningChannel: {
+    nodeId: String,
+    channelPoint: String,
+  },
   walletTypes: {
     bitcoin: { type: Boolean, default: false },
     lightning: { type: Boolean, default: false },
     litecoin: { type: Boolean, default: false },
   },
   wallets: [walletSchema],
+  activeWallets: {
+    bitcoin: { type: mongoose.Schema.Types.ObjectId, ref: 'Wallet' },
+    lightning: { type: mongoose.Schema.Types.ObjectId, ref: 'Wallet' },
+    litecoin: { type: mongoose.Schema.Types.ObjectId, ref: 'Wallet' },
+  },
   transactions: [transactionSchema],
 });
 
@@ -85,3 +107,4 @@ userSchema.methods.comparePassword = async function (candidatePassword) {
 };
 
 module.exports = mongoose.model("User", userSchema);
+module.exports = mongoose.model('Transaction', transactionSchema);

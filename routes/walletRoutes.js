@@ -13,8 +13,10 @@ const {
   backupWallet,
   restoreWallet,
   sendTransaction,
+  createWallet,
   getTransactionHistory,
   updateAccountSettings,
+  removeWallet,
 } = require("../controllers/walletController");
 const { authMiddleware } = require("../middleware/authMiddleware");
 
@@ -30,11 +32,13 @@ router.post("/send-bitcoin", sendBitcoin);
 router.post("/send-lightning", sendLightning);
 router.post("/send-transaction", sendTransaction);
 router.get("/account-details", getAccountDetails);
+router.post('/create', authMiddleware, createWallet);
 router.post("/create-lightning-invoice", createLightningInvoice);
 router.post("/update-security", authMiddleware, updateSecurityLevel);
 router.get("/backup", backupWallet);
 router.post("/restore", restoreWallet);
 router.get("/transaction-history", getTransactionHistory);
 router.post("/update-settings", updateAccountSettings);
+router.delete("/remove/:walletId", removeWallet);
 
 module.exports = router;
