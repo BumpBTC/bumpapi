@@ -16,27 +16,42 @@ const contactSchema = new mongoose.Schema({
   litecoinAddress: { type: String },
 });
 
-const walletSchema = new mongoose.Schema({
-  wallets: [{
-    type: {
-      type: String,
-      enum: ["bitcoin", "lightning", "litecoin"],
-      required: true,
-    },
-    address: { type: String },
-    publicKey: { type: String },
-    privateKey: { type: String },
-    mnemonic: { type: String },
-    balance: { type: Number, default: 0 },
-    isActive: { type: Boolean, default: false },
-  }],
-});
+// const walletSchema = new mongoose.Schema({
+//   wallets: [{
+//     // type: {
+//     //   type: String,
+//     //   enum: ["bitcoin", "lightning", "litecoin"],
+//     //   required: true,
+//     // },
+//     type: {
+//       type: String,
+//       required: true,
+//     },
+//     address: {
+//       type: String,
+//       required: true,
+//     },
+//     privateKey: {
+//       type: String,
+//       required: true,
+//     },
+//     publicKey: {
+//       type: String,
+//       required: true,
+//     },
+//     mnemonic: {
+//       type: String,
+//       required: true,
+//     },
+//     isActive: { type: Boolean, default: false },
+//   }],
+// });
 
 const transactionSchema = new mongoose.Schema({
-  userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
-  type: { type: String, enum: ["send", "receive"], required: true },
-  amount: { type: Number, required: true },
-  address: { type: String, required: true },
+  userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User'},
+  type: { type: String, enum: ["send", "receive"] },
+  amount: { type: Number },
+  address: { type: String },
   timestamp: { type: Date, default: Date.now },
   status: {
     type: String,
@@ -45,8 +60,6 @@ const transactionSchema = new mongoose.Schema({
   },
   walletType: {
     type: String,
-    enum: ["bitcoin", "lightning", "litecoin"],
-    required: true,
   },
   txid: { type: String },
   paymentHash: { type: String },
@@ -86,13 +99,48 @@ const userSchema = new mongoose.Schema({
     lightning: { type: Boolean, default: false },
     litecoin: { type: Boolean, default: false },
   },
-  wallets: [walletSchema],
+  wallets: [{
+    // type: {
+    //   type: String,
+    //   enum: ["bitcoin", "lightning", "litecoin"],
+    //   required: true,
+    // },
+    type: {
+      type: String,
+      required: true,
+    },
+    address: {
+      type: String,
+      required: true,
+    },
+    privateKey: {
+      type: String,
+      required: true,
+    },
+    publicKey: {
+      type: String,
+      required: true,
+    },
+    mnemonic: {
+      type: String,
+      required: true,
+    },
+    balance: {
+      type: Number,
+      default: 0,
+    },
+    isActive: { type: Boolean, default: false },
+  }],
   activeWallets: {
     bitcoin: { type: mongoose.Schema.Types.ObjectId, ref: 'Wallet' },
     lightning: { type: mongoose.Schema.Types.ObjectId, ref: 'Wallet' },
     litecoin: { type: mongoose.Schema.Types.ObjectId, ref: 'Wallet' },
   },
   transactions: [transactionSchema],
+  createdAt: {
+    type: Date,
+    default: Date.now,
+  },
 });
 
 userSchema.pre("save", async function (next) {

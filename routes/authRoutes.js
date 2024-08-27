@@ -1,6 +1,10 @@
 const express = require('express');
+const bcrypt = require('bcryptjs');
+const jwt = require('jsonwebtoken');
+const User = require('../models/User');
 const { register, login, updateEmail } = require('../controllers/authController');
-const { createLightningChannel } = require('../controllers/LightningController.js')
+const { generateWallet } = require('../services/bitcoinService');
+const { createLightningChannel } = require('../controllers/lightningController')
 const router = express.Router();
 
 router.post('/register', register);
@@ -32,46 +36,37 @@ async function sendBackupEmail(email, user) {
 
   router.post('/signup', async (req, res) => {
     try {
-      const { username, password, email, createBitcoin, createLitecoin, createLightning } = req.body;
+      const { username, email, password } = req.body;
   
-      // Check if user already exists
       const existingUser = await User.findOne({ username });
       if (existingUser) {
-        return res.status(400).json({ message: 'Username already exists' });
+        return res.status(400).json({ error: 'Username already exists' });
       }
   
-      // Hash password
       const hashedPassword = await bcrypt.hash(password, 10);
+      const bitcoinWallet = await generateWallet();
   
-      // Create user object
       const user = new User({
         username,
+        email,
         password: hashedPassword,
-        email: email || undefined,
+        wallets: [{
+          type: 'bitcoin',
+          address: bitcoinWallet.address,
+          privateKey: bitcoinWallet.privateKey,
+          publicKey: bitcoinWallet.publicKey,
+          mnemonic: bitcoinWallet.mnemonic,
+          balance: 0,
+          isActive: true
+        }]
       });
   
-      // Create wallets based on user selection
-      if (createBitcoin) {
-        user.bitcoinWallet = createBitcoinWallet();
-      }
-      if (createLitecoin) {
-        user.litecoinWallet = createLitecoinWallet();
-      }
-      if (createLightning) {
-        const lightningChannel = await createLightningChannel(1000, `Initial channel for ${username}`);
-        user.lightningChannel = lightningChannel;
-      }
-  
-      // Save user to database
       await user.save();
   
-      // Send email backup if provided
-      if (email) {
-        await sendBackupEmail(email, user);
-      }
+      const token = jwt.sign({ userId: user._id }, process.env.JWT_SECRET, { expiresIn: '1h' });
   
-      // Create and send JWT token
-      const token = jwt.sign({ userId: user._id }, JWT_SECRET, { expiresIn: '1h' });
+      // Changed this part to safely access the first wallet
+      const firstWallet = user.wallets && user.wallets.length > 0 ? user.wallets[0] : null;
   
       res.status(201).json({
         message: 'User created successfully',
@@ -79,16 +74,19 @@ async function sendBackupEmail(email, user) {
         user: {
           username: user.username,
           email: user.email,
-          bitcoinAddress: user.bitcoinWallet?.address,
-          litecoinAddress: user.litecoinWallet?.address,
-          lightningNodeId: user.lightningChannel?.nodeId,
+          wallets: firstWallet ? [{
+            type: firstWallet.type,
+            address: firstWallet.address,
+            balance: firstWallet.balance
+          }] : []
         },
       });
     } catch (error) {
-      console.error(error);
-      res.status(500).json({ message: 'Server error' });
+      console.error('Signup error:', error);
+      res.status(500).json({ error: 'Server error', details: error.message });
     }
   });
+  
   
   router.post('/login', async (req, res) => {
     try {
@@ -107,7 +105,7 @@ async function sendBackupEmail(email, user) {
       }
   
       // Create and send JWT token
-      const token = jwt.sign({ userId: user._id }, JWT_SECRET, { expiresIn: '1h' });
+      const token = jwt.sign({ userId: user._id }, process.env.JWT_SECRET, { expiresIn: '1h' });
   
       res.json({
         message: 'Login successful',
@@ -115,9 +113,7 @@ async function sendBackupEmail(email, user) {
         user: {
           username: user.username,
           email: user.email,
-          bitcoinAddress: user.bitcoinWallet?.address,
-          litecoinAddress: user.litecoinWallet?.address,
-          lightningNodeId: user.lightningChannel?.nodeId,
+          bitcoinAddress: user.wallets[0]?.address,
         },
       });
     } catch (error) {
@@ -125,8 +121,5 @@ async function sendBackupEmail(email, user) {
       res.status(500).json({ message: 'Server error' });
     }
   });
-  
-  module.exports = router;
-
 
 module.exports = router;

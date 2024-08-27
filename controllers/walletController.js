@@ -1,4 +1,5 @@
 const User = require("../models/User");
+const bitcoin = require('bitcoinjs-lib');
 const Transaction = require('../models/User');
 const {
   getBalance,
@@ -364,10 +365,20 @@ exports.sendLightning = async (req, res) => {
   }
 };
 
-exports.createBitcoinWallet = async (req, res) => {
-  const keyPair = bitcoin.ECPair.makeRandom();
-  const { address } = bitcoin.payments.p2pkh({ pubkey: keyPair.publicKey });
-  return { address, privateKey: keyPair.toWIF() };
+exports.createBitcoinWallet = async () => {
+  try {
+    const wallet = await generateWallet();
+    return {
+      type: 'bitcoin',
+      address: wallet.address,
+      privateKey: wallet.privateKey,
+      publicKey: wallet.publicKey,
+      mnemonic: wallet.mnemonic,
+    };
+  } catch (error) {
+    console.error("Error creating Bitcoin wallet:", error);
+    throw error;
+  }
 };
 
 exports.createLitecoinWallet = async (req, res) => {
