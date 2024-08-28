@@ -36,30 +36,33 @@ exports.getWalletInfo = async (req, res) => {
       return res.status(404).json({ error: "User not found" });
     }
 
-    const walletInfo = await Promise.all(
-      user.wallets.map(async (wallet) => {
-        let balance = 0;
-        let address = wallet.address;
-        switch (wallet.type) {
-          case "bitcoin":
-            balance = await bitcoinService.getBalance(wallet.address);
-            break;
-          case "lightning":
-            balance = await getChannelBalance(wallet.publicKey);
-            break;
-          case "litecoin":
-            balance = await bitcoinService.getBalance(wallet.address);
-            break;
-        }
-        return {
-          id: wallet._id,
-          type: wallet.type,
-          address: address,
-          balance,
-          isActive: wallet.isActive
-        };
-      })
-    );
+    let walletInfo = [];
+    if (user.wallets && Array.isArray(user.wallets)) {
+      walletInfo = await Promise.all(
+        user.wallets.map(async (wallet) => {
+          let balance = 0;
+          let address = wallet.address;
+          switch (wallet.type) {
+            case "bitcoin":
+              balance = await bitcoinService.getBalance(wallet.address);
+              break;
+            case "lightning":
+              balance = await getChannelBalance(wallet.publicKey);
+              break;
+            case "litecoin":
+              balance = await bitcoinService.getBalance(wallet.address);
+              break;
+          }
+          return {
+            id: wallet._id,
+            type: wallet.type,
+            address: address,
+            balance,
+            isActive: wallet.isActive
+          };
+        })
+      );
+    }
 
     const transactions = await Transaction.find({ userId: req.userId })
       .sort({ timestamp: -1 })
@@ -412,21 +415,12 @@ exports.createWallet = async (req, res) => {
     }
 
     if (!newWallet.address) {
-      return res
-        .status(500)
-        .json({ error: "Failed to generate wallet address" });
+      return res.status(500).json({ error: "Failed to generate wallet address" });
     }
 
     newWallet.isActive = true;
-    // user.wallets.forEach((wallet) => {
-    //   if (wallet.type === type) {
-    //     wallet.isActive = false;
-    //   }
-    // });
     user.wallets.push(newWallet);
-
     user.activeWallets[type] = newWallet._id;
-
     await user.save();
 
     res.json({
