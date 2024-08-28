@@ -5,29 +5,25 @@ const bip39 = require('bip39');
 const network = litecore.Networks.testnet; // Use mainnet for production
 const LITECOIN_API_URL = 'https://chain.so/api/v2/ltc/test'; // Use mainnet URL for production
 
-exports.generateLitecoinWallet = async (mnemonic, privateKey) => {
-  let seed, hdPrivateKey;
-  if (mnemonic) {
-    seed = await bip39.mnemonicToSeed(mnemonic);
-    hdPrivateKey = litecore.HDPrivateKey.fromSeed(seed, network);
-  } else if (privateKey) {
-    hdPrivateKey = new litecore.HDPrivateKey(privateKey);
-  } else {
-    mnemonic = bip39.generateMnemonic();
-    seed = await bip39.mnemonicToSeed(mnemonic);
-    hdPrivateKey = litecore.HDPrivateKey.fromSeed(seed, network);
+exports.generateLitecoinWallet = async () => {
+  try {
+    const mnemonic = bip39.generateMnemonic();
+    const seed = await bip39.mnemonicToSeed(mnemonic);
+    const hdPrivateKey = litecore.HDPrivateKey.fromSeed(seed, litecore.Networks.testnet);
+    const derived = hdPrivateKey.derive("m/44'/2'/0'/0/0");
+    const address = derived.privateKey.toAddress().toString();
+
+    return {
+      type: 'litecoin',
+      address,
+      publicKey: derived.publicKey.toString(),
+      privateKey: derived.privateKey.toString(),
+      mnemonic,
+    };
+  } catch (error) {
+    console.error('Error generating Litecoin wallet:', error);
+    throw error;
   }
-
-  const derived = hdPrivateKey.derive("m/44'/2'/0'/0/0");
-  const address = derived.publicKey.toAddress().toString();
-
-  return {
-    type: 'litecoin',
-    address,
-    publicKey: derived.publicKey.toString(),
-    privateKey: derived.privateKey.toString(),
-    mnemonic,
-  };
 };
 
 exports.getLitecoinBalance = async (address) => {

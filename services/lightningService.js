@@ -6,12 +6,6 @@ const User = require('../models/User');
 const LIGHTNING_API_URL = 'https://api.opennode.com/v1';
 const OPENNODE_API_KEY = process.env.OPENNODE_API_KEY;
 
-const testnetNodes = [
-  '02df5ffe895c778e10f7742a6c5b8a0cefbe9465df58b92fadeb883752c8107c8f@3.33.236.230:9735',
-  '0270685ca81a8e4d4d01beec5781f4cc924684072ae52c507f8ebe9daf0caaab7b@159.203.125.125:9735',
-  '03ce09c8922b1aca0a43c869af2db821a9e12a3ca2c9eebc76e4d1e5e4c4c3d840@34.250.234.192:9735'
-];
-
 const lightningApi = axios.create({
   baseURL: LIGHTNING_API_URL,
   headers: {
@@ -19,6 +13,103 @@ const lightningApi = axios.create({
     'Content-Type': 'application/json'
   }
 });
+
+const testnetNodes = [
+  '02df5ffe895c778e10f7742a6c5b8a0cefbe9465df58b92fadeb883752c8107c8f@3.33.236.230:9735',
+  '0270685ca81a8e4d4d01beec5781f4cc924684072ae52c507f8ebe9daf0caaab7b@159.203.125.125:9735',
+  '03ce09c8922b1aca0a43c869af2db821a9e12a3ca2c9eebc76e4d1e5e4c4c3d840@34.250.234.192:9735'
+];
+
+exports.createLightningWallet = async () => {
+  try {
+    const mnemonic = bip39.generateMnemonic();
+    const seed = bip39.mnemonicToSeedSync(mnemonic);
+    const root = bitcoin.bip32.fromSeed(seed);
+    const child = root.derivePath("m/0'/0'/0'");
+    const privateKey = child.privateKey.toString('hex');
+    
+    const response = await lightningApi.post('/wallets', {
+      private_key: privateKey
+    });
+
+    return {
+      walletId: response.data.id,
+      privateKey: privateKey,
+      mnemonic: mnemonic
+    };
+  } catch (error) {
+    console.error('Failed to create Lightning wallet:', error);
+    throw error;
+  }
+};
+
+exports.importLightningWallet = async (mnemonic) => {
+  try {
+    const seed = bip39.mnemonicToSeedSync(mnemonic);
+    const root = bitcoin.bip32.fromSeed(seed);
+    const child = root.derivePath("m/0'/0'/0'");
+    const privateKey = child.privateKey.toString('hex');
+    
+    const response = await lightningApi.post('/wallets', {
+      private_key: privateKey
+    });
+
+    return {
+      walletId: response.data.id,
+      privateKey: privateKey
+    };
+  } catch (error) {
+    console.error('Failed to import Lightning wallet:', error);
+    throw error;
+  }
+};
+
+exports.getChannelBalance = async (walletId) => {
+  try {
+    const response = await lightningApi.get('/balance');
+    return response.data.balance / 100000000; // Convert sats to BTC
+  } catch (error) {
+    console.error('Failed to get channel balance:', error);
+    throw error;
+  }
+};
+
+exports.createInvoice = async (walletId, amount, memo) => {
+  try {
+    const response = await lightningApi.post('/charges', {
+      amount,
+      description: memo,
+      currency: 'BTC'
+    });
+    return {
+      id: response.data.id,
+      paymentRequest: response.data.lightning_invoice.payreq,
+      description: response.data.description,
+      amount: response.data.amount,
+      createdAt: response.data.created_at
+    };
+  } catch (error) {
+    console.error('Failed to create invoice:', error);
+    throw error;
+  }
+};
+
+exports.payInvoice = async (walletId, paymentRequest) => {
+  try {
+    const response = await lightningApi.post('/withdrawals', {
+      type: 'ln',
+      address: paymentRequest
+    });
+    return {
+      id: response.data.id,
+      status: response.data.status,
+      amount: response.data.amount / 100000000 // Convert sats to BTC
+    };
+  } catch (error) {
+    console.error('Failed to pay invoice:', error);
+    throw error;
+  }
+};
 
 exports.createLightningChannel = async (userId, amount, channelName, nodeUri) => {
   const updateProgress = async (progress) => {
@@ -78,31 +169,35 @@ exports.createLightningChannel = async (userId, amount, channelName, nodeUri) =>
   }
 };
 
-// exports.createLightningChannel = async (nodeUri, amount) => {
-//   for (let i = 0; i < testnetNodes.length; i++) {
-//     try {
-//       const response = await lightningApi.post('/channels', {
-//         node_pubkey_string: testnetNodes[i].split('@')[0],
-//         local_funding_amount: amount,
-//         push_sat: 0,
-//         private: false
-//       });
+exports.closeChannel = async (walletId, channelId) => {
+  try {
+    const response = await lightningApi.post(`/channels/${channelId}/close`);
+    return {
+      closingTxid: response.data.closing_txid,
+      settledBalance: response.data.settled_balance / 100000000 // Convert sats to BTC
+    };
+  } catch (error) {
+    console.error('Failed to close channel:', error);
+    throw error;
+  }
+};
 
-//     return {
-//         channelId: response.data.funding_txid_str,
-//         capacity: response.data.capacity,
-//         status: response.data.active ? 'active' : 'inactive',
-//         nodePubkey: testnetNodes[i].split('@')[0],
-//         channelName: channelName
-//       };
-//     } catch (error) {
-//       console.error(`Failed to create channel with node ${i + 1}:`, error);
-//       if (i === testnetNodes.length - 1) {
-//         throw new Error('Failed to create channel with any available node');
-//       }
-//     }
-//   }
-// };
+exports.getTransactionHistory = async (walletId) => {
+  try {
+    const response = await lightningApi.get('/withdrawals');
+    return response.data.data.map(tx => ({
+      id: tx.id,
+      amount: tx.amount / 100000000, // Convert sats to BTC
+      fee: tx.fee / 100000000,
+      status: tx.status,
+      createdAt: tx.created_at,
+      type: tx.type
+    }));
+  } catch (error) {
+    console.error('Failed to get transaction history:', error);
+    throw error;
+  }
+};
 
 exports.getChannelConfigurations = async (userId) => {
   try {
@@ -149,157 +244,6 @@ exports.deleteChannelConfiguration = async (userId, configId) => {
     await user.save();
   } catch (error) {
     console.error('Error deleting channel configuration:', error);
-    throw error;
-  }
-};
-
-exports.createLightningWallet = async () => {
-  try {
-    const mnemonic = bip39.generateMnemonic();
-    const seed = bip39.mnemonicToSeedSync(mnemonic);
-    const root = bitcoin.bip32.fromSeed(seed);
-    const child = root.derivePath("m/0'/0'/0'");
-    const privateKey = child.privateKey.toString('hex');
-    
-    const response = await lightningApi.post('/wallets', {
-      private_key: privateKey
-    });
-
-    return {
-      walletId: response.data.id,
-      privateKey: privateKey,
-      mnemonic: mnemonic
-    };
-  } catch (error) {
-    console.error('Failed to create Lightning wallet:', error);
-    throw error;
-  }
-};
-
-exports.importLightningWallet = async (mnemonic) => {
-  try {
-    const seed = bip39.mnemonicToSeedSync(mnemonic);
-    const root = bitcoin.bip32.fromSeed(seed);
-    const child = root.derivePath("m/0'/0'/0'");
-    const privateKey = child.privateKey.toString('hex');
-    
-    const response = await lightningApi.post('/wallets', {
-      private_key: privateKey
-    });
-
-    return {
-      walletId: response.data.id,
-      privateKey: privateKey
-    };
-  } catch (error) {
-    console.error('Failed to import Lightning wallet:', error);
-    throw error;
-  }
-};
-
-exports.getChannelBalance = async (walletId) => {
-  try {
-    // const response = await lightningApi.get(`/wallets/${walletId}/balance`);
-    const response = await lightningApi.get('/balance');
-    return response.data.balance / 100000000; // Convert sats to BTC
-  } catch (error) {
-    console.error('Failed to get channel balance:', error);
-    throw error;
-  }
-};
-
-
-exports.createInvoice = async (walletId, amount, memo) => {
-  try {
-    // const response = await lightningApi.post(`/wallets/${walletId}/invoices`, {
-      const response = await lightningApi.post('/charges', {
-      amount,
-      description: memo,
-      currency: 'BTC'
-    });
-    // return response.data;
-    return {
-      id: response.data.id,
-      paymentRequest: response.data.lightning_invoice.payreq,
-      description: response.data.description,
-      amount: response.data.amount,
-      createdAt: response.data.created_at
-    };
-  } catch (error) {
-    console.error('Failed to create invoice:', error);
-    throw error;
-  }
-};
-
-exports.payInvoice = async (walletId, paymentRequest) => {
-  try {
-    // const response = await lightningApi.post(`/wallets/${walletId}/pay`, {
-      const response = await lightningApi.post('/withdrawals', {
-        type: 'ln',
-        address: paymentRequest
-      });
-    // return response.data;
-    return {
-      id: response.data.id,
-      status: response.data.status,
-      amount: response.data.amount / 100000000 // Convert sats to BTC
-    };
-  } catch (error) {
-    console.error('Failed to pay invoice:', error);
-    throw error;
-  }
-};
-
-exports.openChannel = async (walletId, nodeUri, amount) => {
-  try {
-    const response = await lightningApi.post(`/wallets/${walletId}/channels`, {
-      node_uri: nodeUri,
-      amount
-    });
-    return response.data;
-  } catch (error) {
-    console.error('Failed to open channel:', error);
-    throw error;
-  }
-};
-
-exports.closeChannel = async (walletId, channelId) => {
-  try {
-    // const response = await lightningApi.post(`/wallets/${walletId}/channels/${channelId}/close`);
-    const response = await lightningApi.post(`/channels/${channelId}/close`);
-    // return response.data;
-    return {
-      closingTxid: response.data.closing_txid,
-      settledBalance: response.data.settled_balance / 100000000 // Convert sats to BTC
-    };
-  } catch (error) {
-    console.error('Failed to close channel:', error);
-    throw error;
-  }
-};
-
-exports.getTransactionHistory = async (walletId) => {
-  try {
-    // const response = await lightningApi.get(`/wallets/${walletId}/transactions`);
-    // return response.data.map(tx => ({
-    //   id: tx.id,
-    //   amount: tx.amount / 100000000, // Convert sats to BTC
-    //   fee: tx.fee / 100000000,
-    //   status: tx.status,
-    //   timestamp: tx.created_at,
-    //   type: tx.type,
-    // }));
-    const response = await lightningApi.get('/withdrawals');
-    return response.data.map(tx => ({
-      id: tx.id,
-      amount: tx.amount / 100000000, // Convert sats to BTC
-      fee: tx.fee / 100000000,
-      status: tx.status,
-      createdAt: tx.created_at,
-      type: tx.type
-    }));
-  } catch (error) {
-    console.error('Failed to get transaction history:', error);
     throw error;
   }
 };

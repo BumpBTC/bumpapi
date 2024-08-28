@@ -2,68 +2,101 @@ const User = require("../models/User");
 const jwt = require("jsonwebtoken");
 const crypto = require("crypto");
 const sendEmail = require("../utils/sendEmail");
-const { generateBitcoinWallet } = require("../services/bitcoinService");
+const { generateWallet } = require("../services/bitcoinService");
 const { createLightningWallet } = require("../services/lightningService");
+const { createLightningChannel } = require("../services/lightningService");
+const { generateLitecoinWallet } = require("../services/litecoinService");
 
 exports.register = async (req, res) => {
   try {
-    const { username, email, password, walletTypes } = req.body;
+    const { username, password, email, walletType } = req.body;
 
-    if (!username || !email || !password) {
-      return res
-        .status(400)
-        .json({ error: "Username, email, and password are required" });
+    if (!username || !password || !walletType) {
+      return res.status(400).json({ error: "Username, password, and wallet type are required" });
     }
 
-    const existingUser = await User.findOne({ $or: [{ email }, { username }] });
+    const existingUser = await User.findOne({ username });
     if (existingUser) {
-      return res
-        .status(400)
-        .json({ error: "User with this email or username already exists" });
+      return res.status(400).json({ error: "User with this username already exists" });
     }
 
-    const user = new User({ username, email, password });
+    const user = new User({ username, password, email });
 
-    if (walletTypes.bitcoin) {
-      const bitcoinWallet = generateBitcoinWallet();
-      user.wallets.push({
-        type: "bitcoin",
-        address: bitcoinWallet.address,
-        publicKey: bitcoinWallet.publicKey,
-        privateKey: bitcoinWallet.privateKey,
-      });
+    let wallet;
+    switch (walletType) {
+      case "bitcoin":
+        wallet = generateWallet();
+        break;
+      case "lightning":
+        wallet = await createLightningWallet();
+        break;
+      case "litecoin":
+        wallet = generateLitecoinWallet();
+        break;
+      default:
+        return res.status(400).json({ error: "Invalid wallet type" });
     }
 
-    if (walletTypes.lightning) {
-      const lightningWallet = await createLightningWallet();
-      user.wallets.push({
-        type: "lightning",
-        publicKey: lightningWallet.publicKey,
-      });
-    }
+    // if (walletTypes.bitcoin) {
+    //   const bitcoinWallet = generateWallet();
+    //   user.wallets.push({
+    //     type: "bitcoin",
+    //     address: bitcoinWallet.address,
+    //     publicKey: bitcoinWallet.publicKey,
+    //     privateKey: bitcoinWallet.privateKey,
+    //   });
+    // }
 
+    // if (walletTypes.lightning) {
+    //   const lightningWallet = await createLightningWallet();
+    //   user.wallets.push({
+    //     type: "lightning",
+    //     publicKey: lightningWallet.publicKey,
+    //   });
+    // }
+
+    // if (walletTypes.litecoin) {
+    //   const litecoinWallet = generateLitecoinWallet();
+    //   user.wallets.push({
+    //     type: "litecoin",
+    //     address: litecoinWallet.address,
+    //     publicKey: litecoinWallet.publicKey,
+    //     privateKey: litecoinWallet.privateKey,
+    //   });
+    // }
+
+    user.wallets.push({
+      type: walletType,
+      address: wallet.address,
+      publicKey: wallet.publicKey,
+      privateKey: wallet.privateKey,
+    });
+
+    user.activeWallet = walletType;
     await user.save();
-    const verificationToken = crypto.randomBytes(20).toString("hex");
-    user.verificationToken = verificationToken;
+
     const token = jwt.sign({ userId: user._id }, process.env.JWT_SECRET);
 
-       // Send verification email
-       const verificationUrl = `${process.env.FRONTEND_URL}/verify-email/${verificationToken}`;
-       await sendEmail(user.email, 'Verify Your Email', `Please click this link to verify your email: ${verificationUrl}`);
-   
-       res.status(201).json({  });
+    if (email) {
+      // TODO: Implement email backup functionality
+      const backupInfo = user.wallets.map(wallet => ({
+        type: wallet.type,
+        address: wallet.address,
+        publicKey: wallet.publicKey,
+      }));
+      await sendEmail(email, "Wallet Backup Information", JSON.stringify(backupInfo, null, 2));
+    }
 
     res.status(201).json({
       token,
       user: {
         username: user.username,
         email: user.email,
-        message: 'User registered successfully. Please check your email to verify your account.',
-        wallets: user.wallets.map((wallet) => ({
-          type: wallet.type,
+        wallet: {
+          type: walletType,
           address: wallet.address,
           publicKey: wallet.publicKey,
-        })),
+        },
       },
     });
   } catch (error) {
@@ -81,10 +114,6 @@ exports.login = async (req, res) => {
 
     if (!user || !(await user.comparePassword(password))) {
       return res.status(400).json({ error: "Invalid login credentials" });
-    }
-
-    if (!user.isVerified) {
-      return res.status(400).json({ error: 'Please verify your email before logging in' });
     }
 
     const token = jwt.sign({ userId: user._id }, process.env.JWT_SECRET, { expiresIn: '1d' });
@@ -118,6 +147,26 @@ exports.verifyEmail = async (req, res) => {
   } catch (error) {
     console.error('Email verification error:', error);
     res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+exports.updateEmail = async (req, res) => {
+  try {
+    const { email } = req.body;
+    const userId = req.userId; // Assuming you have middleware that sets this
+
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({ error: "User not found" });
+    }
+
+    user.email = email || null; // Set to null if email is empty string
+    await user.save();
+
+    res.json({ message: "Email updated successfully" });
+  } catch (error) {
+    console.error("Email update error:", error);
+    res.status(500).json({ error: "Failed to update email" });
   }
 };
 
@@ -166,6 +215,38 @@ exports.resetPassword = async (req, res) => {
   } catch (error) {
     console.error('Reset password error:', error);
     res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+exports.completeSignup = async (req, res) => {
+  try {
+    const { backedUp, email } = req.body;
+    const userId = req.userId; // Assuming you have middleware that sets this
+
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({ error: "User not found" });
+    }
+
+    user.backedUp = backedUp;
+    user.email = email || user.email;
+    await user.save();
+
+    if (email && backedUp) {
+      const wallet = user.wallets.find(w => w.type === user.activeWallet);
+      const backupInfo = {
+        type: wallet.type,
+        address: wallet.address,
+        publicKey: wallet.publicKey,
+      };
+      await sendEmail(email, "Wallet Backup Information", JSON.stringify(backupInfo, null, 2));
+    }
+
+    const token = jwt.sign({ userId: user._id }, process.env.JWT_SECRET);
+    res.json({ token, user: { username: user.username, email: user.email, activeWallet: user.activeWallet } });
+  } catch (error) {
+    console.error("Complete signup error:", error);
+    res.status(500).json({ error: "Internal server error" });
   }
 };
 

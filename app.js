@@ -35,10 +35,10 @@ mongoose
   .catch((err) => console.error("MongoDB connection error:", err));
 
 app.use("/api/auth", authRoutes);
-app.use("/api/wallet", authMiddleware, walletRoutes);
 app.use("/api/wallet", walletRoutes);
-app.use('/api/lightning', authMiddleware, lightningRoutes);
-app.use("/api/litecoin", authMiddleware, litecoinRoutes);
+app.use("/api/wallet", walletRoutes);
+app.use('/api/lightning', lightningRoutes);
+app.use("/api/litecoin", litecoinRoutes);
 app.use('/api/contacts', contactRoutes);
 app.use("/api/stake", stakeRoutes);
 app.get("/convert", async (req, res) => {
