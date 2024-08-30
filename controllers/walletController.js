@@ -31,44 +31,28 @@ const qrcode = require("qrcode");
 
 exports.getWalletInfo = async (req, res) => {
   try {
-    const user = await User.findById(req.userId);
+    const user = await User.findById(req.user._id).populate('wallets');
     if (!user) {
       return res.status(404).json({ error: "User not found" });
     }
 
-    const walletInfo = await Promise.all(
-      user.wallets.map(async (wallet) => {
-        let balance = 0;
-        let address = wallet.address;
-        switch (wallet.type) {
-          case "bitcoin":
-            balance = await bitcoinService.getBalance(wallet.address);
-            break;
-          case "lightning":
-            balance = await getChannelBalance(wallet.publicKey);
-            break;
-          case "litecoin":
-            balance = await bitcoinService.getBalance(wallet.address);
-            break;
-        }
-        return {
-          id: wallet._id,
-          type: wallet.type,
-          address: address,
-          balance,
-          isActive: wallet.isActive
-        };
-      })
-    );
+    const walletInfo = user.wallets.map(wallet => ({
+      type: wallet.type,
+      address: wallet.address,
+      balance: wallet.balance,
+      isActive: wallet.isActive
+    }));
 
-    const transactions = await Transaction.find({ userId: req.userId })
-      .sort({ timestamp: -1 })
-      .limit(10);
+    const activeWallet = walletInfo.find(w => w.isActive) || walletInfo[0];
 
-    res.json({ wallets: walletInfo, transactions });
+    res.json({ 
+      wallets: walletInfo,
+      activeWallet: activeWallet,
+      transactions: user.transactions || []
+    });
   } catch (error) {
-    console.error("Error fetching wallet info:", error);
-    res.status(500).json({ error: "Internal server error" });
+    console.error('Error in getWalletInfo:', error);
+    res.status(500).json({ error: "Internal server error", details: error.message });
   }
 };
 
@@ -392,50 +376,42 @@ exports.createWallet = async (req, res) => {
     const { type } = req.body;
     const user = await User.findById(req.userId);
 
-    if (user.wallets.some((w) => w.type === type)) {
-      return res.status(400).json({ error: `${type} wallet already exists` });
+    if (type !== 'bitcoin') {
+      return res.status(400).json({ error: 'Only Bitcoin wallets are supported at this time' });
     }
 
-    let newWallet;
-    switch (type) {
-      case "bitcoin":
-        newWallet = await bitcoinService.generateWallet();
-        break;
-      case "litecoin":
-        newWallet = await litecoinService.generateLitecoinWallet();
-        break;
-      case "lightning":
-        newWallet = await lightningService.createLightningWallet();
-        break;
-      default:
-        return res.status(400).json({ error: "Invalid wallet type" });
-    }
+    const newWallet = await generateWallet();
 
-    if (!newWallet.address) {
-      return res
-        .status(500)
-        .json({ error: "Failed to generate wallet address" });
-    }
-
-    newWallet.isActive = true;
-    // user.wallets.forEach((wallet) => {
-    //   if (wallet.type === type) {
-    //     wallet.isActive = false;
-    //   }
-    // });
-    user.wallets.push(newWallet);
-
-    user.activeWallets[type] = newWallet._id;
+    user.wallets.push({
+      type: 'bitcoin',
+      address: newWallet.address,
+      privateKey: newWallet.privateKey,
+      publicKey: newWallet.publicKey,
+      mnemonic: newWallet.mnemonic,
+      balance: 0,
+      isActive: false
+    });
 
     await user.save();
 
+    console.log('New Bitcoin wallet created:', {
+      userId: user._id,
+      publicKey: newWallet.publicKey,
+      privateKey: newWallet.privateKey,
+      address: newWallet.address
+    });
+
     res.json({
-      message: `${type} wallet created successfully`,
-      wallet: newWallet,
+      message: 'Bitcoin wallet created successfully',
+      wallet: {
+        type: 'bitcoin',
+        address: newWallet.address,
+        balance: 0
+      },
     });
   } catch (error) {
-    console.error("Error creating wallet:", error);
-    res.status(500).json({ error: "Failed to create wallet" });
+    console.error('Error creating wallet:', error);
+    res.status(500).json({ error: 'Failed to create wallet' });
   }
 };
 

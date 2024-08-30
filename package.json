@@ -1,6 +1,6 @@
 {
   "name": "bumpbtc-wallet-api",
-  "version": "0.0.2",
+  "version": "0.1",
   "description": "tap-to-pay mobile btc wallet",
   "main": "src/app.js",
   "engines": {

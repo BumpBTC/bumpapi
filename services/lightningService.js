@@ -5,6 +5,7 @@ const User = require('../models/User');
 
 const LIGHTNING_API_URL = 'https://api.opennode.com/v1';
 const OPENNODE_API_KEY = process.env.OPENNODE_API_KEY;
+const OPENNODE_API_URL = 'https://api.opennode.com/v1';
 
 const lightningApi = axios.create({
   baseURL: LIGHTNING_API_URL,
@@ -13,6 +14,15 @@ const lightningApi = axios.create({
     'Content-Type': 'application/json'
   }
 });
+
+const opennodeApi = axios.create({
+  baseURL: OPENNODE_API_URL,
+  headers: {
+    'Authorization': OPENNODE_API_KEY,
+    'Content-Type': 'application/json'
+  }
+});
+
 
 const testnetNodes = [
   '02df5ffe895c778e10f7742a6c5b8a0cefbe9465df58b92fadeb883752c8107c8f@3.33.236.230:9735',
@@ -247,6 +257,78 @@ exports.deleteChannelConfiguration = async (userId, configId) => {
     throw error;
   }
 };
+
+exports.createNfcChannel = async (req, res) => {
+  try {
+    const { userId } = req.user;
+    const user = await User.findById(userId);
+
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    // TODO: Implement actual channel creation when we have our own Lightning node
+    // For now, we'll just mark that the user has an NFC channel
+    user.hasNfcChannel = true;
+    await user.save();
+
+    res.status(201).json({ message: 'NFC channel created successfully' });
+  } catch (error) {
+    console.error('Error creating NFC channel:', error);
+    res.status(500).json({ message: 'Error creating NFC channel' });
+  }
+};
+
+exports.getNfcChannelBalance = async (req, res) => {
+  try {
+    const response = await opennodeApi.get('/balance');
+    const balance = response.data.balance / 100000000; // Convert sats to BTC
+    res.json({ balance });
+  } catch (error) {
+    console.error('Error getting NFC channel balance:', error);
+    res.status(500).json({ message: 'Error getting NFC channel balance' });
+  }
+};
+
+exports.createNfcInvoice = async (req, res) => {
+  try {
+    const { amount, description } = req.body;
+    const response = await opennodeApi.post('/charges', {
+      amount,
+      description,
+      currency: 'USD'
+    });
+    res.json({
+      id: response.data.id,
+      paymentRequest: response.data.lightning_invoice.payreq,
+      description: response.data.description,
+      amount: response.data.amount,
+      createdAt: response.data.created_at
+    });
+  } catch (error) {
+    console.error('Error creating NFC invoice:', error);
+    res.status(500).json({ message: 'Error creating NFC invoice' });
+  }
+};
+
+exports.payNfcInvoice = async (req, res) => {
+  try {
+    const { paymentRequest } = req.body;
+    const response = await opennodeApi.post('/withdrawals', {
+      type: 'ln',
+      address: paymentRequest
+    });
+    res.json({
+      id: response.data.id,
+      status: response.data.status,
+      amount: response.data.amount / 100000000 // Convert sats to BTC
+    });
+  } catch (error) {
+    console.error('Error paying NFC invoice:', error);
+    res.status(500).json({ message: 'Error paying NFC invoice' });
+  }
+};
+
 
 exports.initLightning = async () => {
   // Initialize Lightning node connection

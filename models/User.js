@@ -16,36 +16,35 @@ const contactSchema = new mongoose.Schema({
   litecoinAddress: { type: String },
 });
 
-// const walletSchema = new mongoose.Schema({
-//   wallets: [{
-//     // type: {
-//     //   type: String,
-//     //   enum: ["bitcoin", "lightning", "litecoin"],
-//     //   required: true,
-//     // },
-//     type: {
-//       type: String,
-//       required: true,
-//     },
-//     address: {
-//       type: String,
-//       required: true,
-//     },
-//     privateKey: {
-//       type: String,
-//       required: true,
-//     },
-//     publicKey: {
-//       type: String,
-//       required: true,
-//     },
-//     mnemonic: {
-//       type: String,
-//       required: true,
-//     },
-//     isActive: { type: Boolean, default: false },
-//   }],
-// });
+const walletSchema = new mongoose.Schema({
+  type: {
+    type: String,
+    required: true,
+  },
+  address: {
+    type: String,
+    required: true,
+  },
+  privateKey: {
+    type: String,
+    required: true,
+  },
+  publicKey: {
+    type: String,
+    required: true,
+  },
+  mnemonic: {
+    type: String,
+    required: true,
+  },
+  balance: {
+    type: Number,
+    default: 0,
+  },
+  isActive: { type: Boolean, default: false },
+});
+
+const Wallet = mongoose.model('Wallet', walletSchema);
 
 const transactionSchema = new mongoose.Schema({
   userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User'},
@@ -99,38 +98,7 @@ const userSchema = new mongoose.Schema({
     lightning: { type: Boolean, default: false },
     litecoin: { type: Boolean, default: false },
   },
-  wallets: [{
-    // type: {
-    //   type: String,
-    //   enum: ["bitcoin", "lightning", "litecoin"],
-    //   required: true,
-    // },
-    type: {
-      type: String,
-      required: true,
-    },
-    address: {
-      type: String,
-      required: true,
-    },
-    privateKey: {
-      type: String,
-      required: true,
-    },
-    publicKey: {
-      type: String,
-      required: true,
-    },
-    mnemonic: {
-      type: String,
-      required: true,
-    },
-    balance: {
-      type: Number,
-      default: 0,
-    },
-    isActive: { type: Boolean, default: false },
-  }],
+  wallets: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Wallet', strictPopulate: false }],
   activeWallets: {
     bitcoin: { type: mongoose.Schema.Types.ObjectId, ref: 'Wallet' },
     lightning: { type: mongoose.Schema.Types.ObjectId, ref: 'Wallet' },
