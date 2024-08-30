@@ -14,6 +14,13 @@ const {
   updateChannelConfiguration,
   deleteChannelConfiguration
 } = require('../controllers/lightningController');
+const {
+  createNfcChannel,
+  getNfcChannelBalance,
+  createNfcInvoice,
+  payNfcInvoice
+} = require('../services/lightningService');
+
 const { authMiddleware } = require('../middleware/authMiddleware');
 
 const router = express.Router();
@@ -31,5 +38,10 @@ router.get('/transaction-history', getLightningTransactionHistory);
 router.get('/channel-configurations', getChannelConfigurations);
 router.put('/channel-configurations/:configId', updateChannelConfiguration);
 router.delete('/channel-configurations/:configId', deleteChannelConfiguration);
+
+router.post('/create-nfc-channel', createNfcChannel);
+router.get('/nfc-channel-balance', getNfcChannelBalance);
+router.post('/create-nfc-invoice', createNfcInvoice);
+router.post('/pay-nfc-invoice', payNfcInvoice);
 
 module.exports = router;
