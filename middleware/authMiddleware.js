@@ -5,20 +5,19 @@ exports.authMiddleware = async (req, res, next) => {
   try {
     const token = req.header('Authorization')?.replace('Bearer ', '');
     if (!token) {
-      throw new Error('No token provided');
+      return res.status(401).json({ error: 'No token provided' });
     }
 
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    const user = await User.findOne({ _id: decoded.userId });
+    const user = await User.findById(decoded.userId);
 
     if (!user) {
-      throw new Error('User not found');
+      return res.status(401).json({ error: 'User not found' });
     }
 
-    req.userId = user._id;
     req.user = user;
     next();
   } catch (error) {
-    res.status(401).json({ error: 'Please authenticate.' });
+    res.status(401).json({ error: 'Please authenticate' });
   }
 };
